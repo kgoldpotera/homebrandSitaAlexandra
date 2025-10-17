@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useCart } from "@/hooks/useCart";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Star, ShoppingCart } from "lucide-react";
 import { useState } from "react";
@@ -14,6 +15,7 @@ import { useState } from "react";
 const ProductDetail = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
+  const { addToCart } = useCart();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [rating, setRating] = useState(5);
@@ -155,6 +157,7 @@ const ProductDetail = () => {
               size="lg" 
               className="w-full"
               disabled={product.out_of_stock}
+              onClick={() => addToCart(product.id)}
             >
               <ShoppingCart className="mr-2 h-5 w-5" />
               {product.out_of_stock ? "Out of Stock" : "Add to Cart"}

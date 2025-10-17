@@ -2,11 +2,13 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ShoppingCart, User, LogOut, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import { useCart } from "@/hooks/useCart";
 import { Badge } from "@/components/ui/badge";
 import logo from "@/assets/logo.png";
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   const { user, isAdmin, signOut } = useAuth();
+  const { totalItems } = useCart();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -53,7 +55,11 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
               <Link to="/cart">
                 <Button variant="ghost" size="icon" className="relative text-primary-dark-foreground hover:text-primary">
                   <ShoppingCart className="h-5 w-5" />
-                  <Badge className="absolute -top-2 -right-2 bg-accent text-accent-foreground">0</Badge>
+                  {totalItems > 0 && (
+                    <Badge className="absolute -top-2 -right-2 bg-accent text-accent-foreground">
+                      {totalItems}
+                    </Badge>
+                  )}
                 </Button>
               </Link>
               
