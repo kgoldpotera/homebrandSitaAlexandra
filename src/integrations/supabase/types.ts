@@ -70,11 +70,60 @@ export type Database = {
         }
         Relationships: []
       }
+      order_items: {
+        Row: {
+          created_at: string
+          id: string
+          order_id: string
+          price: number
+          product_id: string
+          quantity: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          order_id: string
+          price: number
+          product_id: string
+          quantity?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          order_id?: string
+          price?: number
+          product_id?: string
+          quantity?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       orders: {
         Row: {
           amount: number
           created_at: string
+          customer_email: string | null
+          customer_name: string | null
           id: string
+          shipping_address_line1: string | null
+          shipping_address_line2: string | null
+          shipping_city: string | null
+          shipping_country: string | null
+          shipping_postal_code: string | null
           status: string
           stripe_payment_intent_id: string | null
           user_id: string
@@ -82,7 +131,14 @@ export type Database = {
         Insert: {
           amount: number
           created_at?: string
+          customer_email?: string | null
+          customer_name?: string | null
           id?: string
+          shipping_address_line1?: string | null
+          shipping_address_line2?: string | null
+          shipping_city?: string | null
+          shipping_country?: string | null
+          shipping_postal_code?: string | null
           status?: string
           stripe_payment_intent_id?: string | null
           user_id: string
@@ -90,7 +146,14 @@ export type Database = {
         Update: {
           amount?: number
           created_at?: string
+          customer_email?: string | null
+          customer_name?: string | null
           id?: string
+          shipping_address_line1?: string | null
+          shipping_address_line2?: string | null
+          shipping_city?: string | null
+          shipping_country?: string | null
+          shipping_postal_code?: string | null
           status?: string
           stripe_payment_intent_id?: string | null
           user_id?: string

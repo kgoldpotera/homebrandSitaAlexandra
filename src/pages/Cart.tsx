@@ -120,9 +120,11 @@ const Cart = () => {
                     <span className="text-primary">£{total.toFixed(2)}</span>
                   </div>
                 </div>
-                <Button size="lg" className="w-full">
-                  Proceed to Checkout
-                </Button>
+                <Link to="/checkout">
+                  <Button size="lg" className="w-full">
+                    Proceed to Checkout
+                  </Button>
+                </Link>
               </CardContent>
             </Card>
           </div>
