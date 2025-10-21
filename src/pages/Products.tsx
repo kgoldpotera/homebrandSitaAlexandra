@@ -36,7 +36,8 @@ const Products = () => {
     queryFn: async () => {
       let query = supabase
         .from("products")
-        .select("*, categories(name, slug)");
+        .select("*, categories(name, slug)")
+        .order("created_at", { ascending: false });
       
       if (selectedCategory !== "all") {
         const category = categories?.find(c => c.slug === selectedCategory);
@@ -47,7 +48,12 @@ const Products = () => {
       
       const { data, error } = await query;
       
-      if (error) throw error;
+      if (error) {
+        console.error("Error fetching products:", error);
+        throw error;
+      }
+      
+      console.log("Products fetched:", data?.length);
       return data;
     },
     enabled: !!categories,
