@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,15 +15,37 @@ import {
 } from "@/components/ui/select";
 
 const Products = () => {
-  const [searchParams] = useSearchParams();
-  const categoryParam = searchParams.get("category");
-  const [selectedCategory, setSelectedCategory] = useState<string>(categoryParam || "all");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [selectedBrand, setSelectedBrand] = useState<string>("all");
+
+  // Initialize from URL params
+  useEffect(() => {
+    const categoryParam = searchParams.get("category");
+    const brandParam = searchParams.get("brand");
+    if (categoryParam) setSelectedCategory(categoryParam);
+    if (brandParam) setSelectedBrand(brandParam);
+  }, [searchParams]);
 
   const { data: categories } = useQuery({
     queryKey: ["categories"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("categories")
+        .select("*")
+        .is("parent_id", null)
+        .order("name", { ascending: true });
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: brands } = useQuery({
+    queryKey: ["brands"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("brands")
         .select("*")
         .order("name", { ascending: true });
       
@@ -32,23 +54,25 @@ const Products = () => {
     },
   });
 
-  // Organize categories into parent and children
-  const parentCategories = categories?.filter(cat => !cat.parent_id) || [];
-  const getSubcategories = (parentId: string) => 
-    categories?.filter(cat => cat.parent_id === parentId) || [];
-
   const { data: products, isLoading } = useQuery({
-    queryKey: ["products", selectedCategory],
+    queryKey: ["products", selectedCategory, selectedBrand],
     queryFn: async () => {
       let query = supabase
         .from("products")
-        .select("*, categories(name, slug)")
+        .select("*, categories(name, slug), brands(name, slug)")
         .order("created_at", { ascending: false });
       
       if (selectedCategory !== "all") {
         const category = categories?.find(c => c.slug === selectedCategory);
         if (category) {
           query = query.eq("category_id", category.id);
+        }
+      }
+      
+      if (selectedBrand !== "all") {
+        const brand = brands?.find(b => b.slug === selectedBrand);
+        if (brand) {
+          query = query.eq("brand_id", brand.id);
         }
       }
       
@@ -62,7 +86,7 @@ const Products = () => {
       console.log("Products fetched:", data?.length);
       return data;
     },
-    enabled: !!categories,
+    enabled: !!categories && !!brands,
   });
 
   return (
@@ -71,31 +95,46 @@ const Products = () => {
         <div className="mb-8">
           <h1 className="text-4xl font-bold mb-4">Shop All Products</h1>
           
-          <div className="flex gap-4 items-center">
-            <label className="font-semibold">Filter by Category:</label>
-            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-              <SelectTrigger className="w-[250px]">
-                <SelectValue placeholder="All Categories" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Categories</SelectItem>
-                {parentCategories.map((parent) => {
-                  const subcats = getSubcategories(parent.id);
-                  return (
-                    <div key={parent.id}>
-                      <SelectItem value={parent.slug}>
-                        {parent.name}
-                      </SelectItem>
-                      {subcats.map((sub) => (
-                        <SelectItem key={sub.id} value={sub.slug} className="pl-8">
-                          ↳ {sub.name}
-                        </SelectItem>
-                      ))}
-                    </div>
-                  );
-                })}
-              </SelectContent>
-            </Select>
+          <div className="flex gap-4 items-center flex-wrap">
+            <div className="flex gap-2 items-center">
+              <label className="font-semibold">Category:</label>
+              <Select value={selectedCategory} onValueChange={(value) => {
+                setSelectedCategory(value);
+                setSearchParams(value === "all" ? {} : { category: value });
+              }}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="All Categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  {categories?.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.slug}>
+                      {cat.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex gap-2 items-center">
+              <label className="font-semibold">Brand:</label>
+              <Select value={selectedBrand} onValueChange={(value) => {
+                setSelectedBrand(value);
+                setSearchParams(value === "all" ? {} : { brand: value });
+              }}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="All Brands" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Brands</SelectItem>
+                  {brands?.map((brand) => (
+                    <SelectItem key={brand.id} value={brand.slug}>
+                      {brand.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
 

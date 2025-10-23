@@ -31,6 +31,7 @@ const AdminProductForm = () => {
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [brandId, setBrandId] = useState("");
   const [stockQuantity, setStockQuantity] = useState("0");
   const [outOfStock, setOutOfStock] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -41,13 +42,33 @@ const AdminProductForm = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("categories")
-        .select("*");
+        .select("*")
+        .is("parent_id", null)
+        .order("name", { ascending: true });
       
       if (error) throw error;
       return data;
     },
     enabled: isAdmin,
   });
+
+  const { data: brands } = useQuery({
+    queryKey: ["brands"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("brands")
+        .select("*")
+        .order("name", { ascending: true });
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: isAdmin,
+  });
+
+  // Find if the selected category is "Brands"
+  const brandsCategory = categories?.find(cat => cat.slug === "brands");
+  const isBrandsCategory = categoryId === brandsCategory?.id;
 
   const { data: product, isLoading: productLoading } = useQuery({
     queryKey: ["product", id],
@@ -70,6 +91,7 @@ const AdminProductForm = () => {
       setDescription(product.description || "");
       setPrice(product.price.toString());
       setCategoryId(product.category_id || "");
+      setBrandId(product.brand_id || "");
       setStockQuantity(product.stock_quantity.toString());
       setOutOfStock(product.out_of_stock);
       setImagePreview(product.image_url || "");
@@ -121,6 +143,7 @@ const AdminProductForm = () => {
         description,
         price: parseFloat(price),
         category_id: categoryId || null,
+        brand_id: brandId || null,
         stock_quantity: parseInt(stockQuantity),
         out_of_stock: outOfStock,
         image_url: imageUrl,
@@ -266,7 +289,13 @@ const AdminProductForm = () => {
 
             <div>
               <Label htmlFor="category">Category</Label>
-              <Select value={categoryId} onValueChange={setCategoryId}>
+              <Select value={categoryId} onValueChange={(value) => {
+                setCategoryId(value);
+                // Reset brand when category changes
+                if (value !== brandsCategory?.id) {
+                  setBrandId("");
+                }
+              }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select a category" />
                 </SelectTrigger>
@@ -279,6 +308,24 @@ const AdminProductForm = () => {
                 </SelectContent>
               </Select>
             </div>
+
+            {isBrandsCategory && (
+              <div>
+                <Label htmlFor="brand">Brand *</Label>
+                <Select value={brandId} onValueChange={setBrandId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a brand" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {brands?.map((brand) => (
+                      <SelectItem key={brand.id} value={brand.id}>
+                        {brand.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="flex items-center justify-between">
               <div>

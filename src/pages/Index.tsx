@@ -22,6 +22,19 @@ const Index = () => {
     },
   });
 
+  const { data: brands, isLoading: brandsLoading } = useQuery({
+    queryKey: ["brands"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("brands")
+        .select("*")
+        .order("name", { ascending: true });
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const { data: featuredProducts, isLoading: productsLoading } = useQuery({
     queryKey: ["featured-products"],
     queryFn: async () => {
@@ -106,6 +119,42 @@ const Index = () => {
                         <span className="text-4xl">{category.name[0]}</span>
                       </div>
                       <h3 className="font-semibold">{category.name}</h3>
+                    </CardContent>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Brands Section */}
+      <section className="py-16 bg-muted/50">
+        <div className="container mx-auto px-4">
+          <h2 className="text-4xl font-bold text-center mb-12">Shop Brands</h2>
+          
+          {brandsLoading ? (
+            <div className="flex justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+              {brands?.map((brand) => (
+                <Link key={brand.id} to={`/products?brand=${brand.slug}`}>
+                  <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+                    <CardContent className="p-6 text-center">
+                      <div className="w-full aspect-square bg-secondary rounded-lg mb-4 flex items-center justify-center">
+                        {brand.image_url ? (
+                          <img 
+                            src={brand.image_url} 
+                            alt={brand.name}
+                            className="w-full h-full object-cover rounded-lg"
+                          />
+                        ) : (
+                          <span className="text-4xl">{brand.name[0]}</span>
+                        )}
+                      </div>
+                      <h3 className="font-semibold">{brand.name}</h3>
                     </CardContent>
                   </Card>
                 </Link>
