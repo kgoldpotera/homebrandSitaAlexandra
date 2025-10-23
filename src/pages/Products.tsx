@@ -24,12 +24,18 @@ const Products = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("categories")
-        .select("*");
+        .select("*")
+        .order("name", { ascending: true });
       
       if (error) throw error;
       return data;
     },
   });
+
+  // Organize categories into parent and children
+  const parentCategories = categories?.filter(cat => !cat.parent_id) || [];
+  const getSubcategories = (parentId: string) => 
+    categories?.filter(cat => cat.parent_id === parentId) || [];
 
   const { data: products, isLoading } = useQuery({
     queryKey: ["products", selectedCategory],
@@ -68,16 +74,26 @@ const Products = () => {
           <div className="flex gap-4 items-center">
             <label className="font-semibold">Filter by Category:</label>
             <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-              <SelectTrigger className="w-[200px]">
+              <SelectTrigger className="w-[250px]">
                 <SelectValue placeholder="All Categories" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
-                {categories?.map((cat) => (
-                  <SelectItem key={cat.id} value={cat.slug}>
-                    {cat.name}
-                  </SelectItem>
-                ))}
+                {parentCategories.map((parent) => {
+                  const subcats = getSubcategories(parent.id);
+                  return (
+                    <div key={parent.id}>
+                      <SelectItem value={parent.slug}>
+                        {parent.name}
+                      </SelectItem>
+                      {subcats.map((sub) => (
+                        <SelectItem key={sub.id} value={sub.slug} className="pl-8">
+                          ↳ {sub.name}
+                        </SelectItem>
+                      ))}
+                    </div>
+                  );
+                })}
               </SelectContent>
             </Select>
           </div>
