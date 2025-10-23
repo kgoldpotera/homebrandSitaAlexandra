@@ -14,7 +14,8 @@ const Index = () => {
       const { data, error } = await supabase
         .from("categories")
         .select("*")
-        .limit(6);
+        .is("parent_id", null)
+        .order("created_at", { ascending: true });
       
       if (error) throw error;
       return data;
