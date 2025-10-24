@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import Stripe from "https://esm.sh/stripe@14.21.0?target=deno";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import Stripe from "https://esm.sh/stripe@18.5.0?target=deno";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -42,7 +42,7 @@ serve(async (req) => {
     console.log("Cart items:", cartItems.length);
 
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
-      apiVersion: "2024-06-20",
+      apiVersion: "2025-08-27.basil",
     });
 
     // Check if customer exists
@@ -138,14 +138,30 @@ serve(async (req) => {
 
     console.log("Checkout session created:", session.id);
 
-    // Update order with stripe payment intent id
+    // Generate tracking number
+    const trackingNumber = `SA${Date.now().toString().slice(-8)}${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+    
+    // Calculate estimated delivery (7-14 days from now)
+    const estimatedDelivery = new Date();
+    estimatedDelivery.setDate(estimatedDelivery.getDate() + 10);
+
+    // Update order with stripe payment intent id and tracking info
     await supabaseClient
       .from("orders")
-      .update({ stripe_payment_intent_id: session.payment_intent as string })
+      .update({ 
+        stripe_payment_intent_id: session.payment_intent as string,
+        tracking_number: trackingNumber,
+        estimated_delivery_date: estimatedDelivery.toISOString(),
+        delivery_status: 'processing'
+      })
       .eq("id", order.id);
 
     return new Response(
-      JSON.stringify({ url: session.url, orderId: order.id }),
+      JSON.stringify({ 
+        url: session.url, 
+        orderId: order.id,
+        trackingNumber 
+      }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,

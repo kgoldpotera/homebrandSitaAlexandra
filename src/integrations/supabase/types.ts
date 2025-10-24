@@ -153,6 +153,9 @@ export type Database = {
           created_at: string
           customer_email: string | null
           customer_name: string | null
+          delivered_at: string | null
+          delivery_status: string
+          estimated_delivery_date: string | null
           id: string
           shipping_address_line1: string | null
           shipping_address_line2: string | null
@@ -161,6 +164,7 @@ export type Database = {
           shipping_postal_code: string | null
           status: string
           stripe_payment_intent_id: string | null
+          tracking_number: string | null
           user_id: string
         }
         Insert: {
@@ -168,6 +172,9 @@ export type Database = {
           created_at?: string
           customer_email?: string | null
           customer_name?: string | null
+          delivered_at?: string | null
+          delivery_status?: string
+          estimated_delivery_date?: string | null
           id?: string
           shipping_address_line1?: string | null
           shipping_address_line2?: string | null
@@ -176,6 +183,7 @@ export type Database = {
           shipping_postal_code?: string | null
           status?: string
           stripe_payment_intent_id?: string | null
+          tracking_number?: string | null
           user_id: string
         }
         Update: {
@@ -183,6 +191,9 @@ export type Database = {
           created_at?: string
           customer_email?: string | null
           customer_name?: string | null
+          delivered_at?: string | null
+          delivery_status?: string
+          estimated_delivery_date?: string | null
           id?: string
           shipping_address_line1?: string | null
           shipping_address_line2?: string | null
@@ -191,6 +202,7 @@ export type Database = {
           shipping_postal_code?: string | null
           status?: string
           stripe_payment_intent_id?: string | null
+          tracking_number?: string | null
           user_id?: string
         }
         Relationships: []

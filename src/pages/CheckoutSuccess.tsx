@@ -1,13 +1,15 @@
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { CheckCircle } from "lucide-react";
-import { Link } from "react-router-dom";
+import { CheckCircle, Package } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useEffect } from "react";
 import { useCart } from "@/hooks/useCart";
 
 const CheckoutSuccess = () => {
   const { refreshCart } = useCart();
+  const [searchParams] = useSearchParams();
+  const sessionId = searchParams.get("session_id");
 
   useEffect(() => {
     // Clear the cart after successful checkout
@@ -24,17 +26,27 @@ const CheckoutSuccess = () => {
             <p className="text-lg text-muted-foreground mb-8">
               Thank you for your order. We've received your payment and will begin processing your order shortly.
             </p>
-            <p className="text-muted-foreground mb-8">
-              You will receive an email confirmation with your order details and tracking information once your order has been shipped.
+            <p className="text-muted-foreground mb-4">
+              You will receive an email confirmation with your order details and tracking information.
             </p>
+            <div className="bg-muted p-4 rounded-lg mb-8">
+              <div className="flex items-center gap-2 mb-2">
+                <Package className="h-5 w-5 text-primary" />
+                <span className="font-semibold">Track Your Order</span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Your tracking number will be sent to your email shortly. You can track your order anytime using the tracking page.
+              </p>
+            </div>
             <div className="flex gap-4 justify-center">
-              <Link to="/products">
-                <Button size="lg">Continue Shopping</Button>
-              </Link>
-              <Link to="/">
-                <Button size="lg" variant="outline">
-                  Back to Home
+              <Link to="/track-order">
+                <Button size="lg">
+                  <Package className="mr-2 h-4 w-4" />
+                  Track Order
                 </Button>
+              </Link>
+              <Link to="/products">
+                <Button size="lg" variant="outline">Continue Shopping</Button>
               </Link>
             </div>
           </CardContent>

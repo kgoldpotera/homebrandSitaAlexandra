@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ShoppingCart, User, LogOut, LayoutDashboard } from "lucide-react";
+import { ShoppingCart, User, LogOut, LayoutDashboard, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useCart } from "@/hooks/useCart";
@@ -41,6 +41,10 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
               </Link>
               <Link to="/products" className="hover:text-primary transition-colors">
                 Shop
+              </Link>
+              <Link to="/track-order" className="hover:text-primary transition-colors flex items-center gap-1">
+                <Package className="h-4 w-4" />
+                Track Order
               </Link>
               {isAdmin && (
                 <Link to="/admin" className="hover:text-primary transition-colors flex items-center gap-1">
@@ -98,6 +102,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           <p>&copy; 2025 SitaAlexandra. All rights reserved.</p>
           <div className="mt-4 flex justify-center gap-6">
             <Link to="/products" className="hover:text-primary transition-colors">Shop</Link>
+            <Link to="/track-order" className="hover:text-primary transition-colors">Track Order</Link>
             <Link to="/auth" className="hover:text-primary transition-colors">Account</Link>
           </div>
         </div>
