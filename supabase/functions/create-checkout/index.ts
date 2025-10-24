@@ -4,7 +4,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
 };
 
 serve(async (req) => {
@@ -12,23 +13,53 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  console.log("Incoming request:", req.method, req.url);
+
+  const supabaseUrl = Deno.env.get("URL");
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const stripeSecret = Deno.env.get("STRIPE_SECRET_KEY");
+
+  console.log("Env check:", {
+    hasUrl: !!supabaseUrl,
+    hasServiceKey: !!supabaseServiceKey,
+    hasStripeKey: !!stripeSecret,
+  });
+
   const supabaseClient = createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    supabaseUrl ?? "",
+    supabaseServiceKey ?? "",
     { auth: { persistSession: false } }
   );
 
   try {
-    const authHeader = req.headers.get("Authorization")!;
+    const authHeader = req.headers.get("Authorization");
+    console.log("Auth header:", authHeader);
+
+    if (!authHeader) {
+      throw new Error("Missing Authorization header");
+    }
+
     const token = authHeader.replace("Bearer ", "");
-    const { data } = await supabaseClient.auth.getUser(token);
-    const user = data.user;
-    
+    console.log("Extracted token length:", token.length);
+
+    const { data: userData, error: userError } =
+      await supabaseClient.auth.getUser(token);
+    if (userError) {
+      console.error("Error fetching user:", userError);
+      throw new Error("Failed to fetch user from token");
+    }
+
+    const user = userData.user;
+    console.log("User fetched:", user?.id, user?.email);
+
     if (!user?.email) {
       throw new Error("User not authenticated or email not available");
     }
 
-    const { cartItems, shippingAddress } = await req.json();
+    const body = await req.json();
+    console.log("Request body:", body);
+
+    const { cartItems, shippingAddress } = body;
 
     if (!cartItems || cartItems.length === 0) {
       throw new Error("Cart is empty");
@@ -39,14 +70,19 @@ serve(async (req) => {
     }
 
     console.log("Processing checkout for user:", user.email);
-    console.log("Cart items:", cartItems.length);
+    console.log("Cart items count:", cartItems.length);
 
-    const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
+    const stripe = new Stripe(stripeSecret || "", {
       apiVersion: "2025-08-27.basil",
     });
 
     // Check if customer exists
-    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
+    const customers = await stripe.customers.list({
+      email: user.email,
+      limit: 1,
+    });
+    console.log("Stripe customers found:", customers.data.length);
+
     let customerId;
     if (customers.data.length > 0) {
       customerId = customers.data[0].id;
@@ -62,9 +98,11 @@ serve(async (req) => {
 
     // Calculate total
     const total = cartItems.reduce(
-      (sum: number, item: any) => sum + Number(item.products.price) * item.quantity,
+      (sum: number, item: any) =>
+        sum + Number(item.products.price) * item.quantity,
       0
     );
+    console.log("Calculated total:", total);
 
     // Create order record first
     const { data: order, error: orderError } = await supabaseClient
@@ -98,6 +136,7 @@ serve(async (req) => {
       quantity: item.quantity,
       price: item.products.price,
     }));
+    console.log("Prepared order items:", orderItems);
 
     const { error: itemsError } = await supabaseClient
       .from("order_items")
@@ -122,13 +161,16 @@ serve(async (req) => {
       },
       quantity: item.quantity,
     }));
+    console.log("Stripe line items:", lineItems);
 
     // Create checkout session
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       line_items: lineItems,
       mode: "payment",
-      success_url: `${req.headers.get("origin")}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${req.headers.get(
+        "origin"
+      )}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${req.headers.get("origin")}/checkout/cancel`,
       metadata: {
         order_id: order.id,
@@ -139,28 +181,43 @@ serve(async (req) => {
     console.log("Checkout session created:", session.id);
 
     // Generate tracking number
-    const trackingNumber = `SA${Date.now().toString().slice(-8)}${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-    
+    const trackingNumber = `SA${Date.now().toString().slice(-8)}${Math.random()
+      .toString(36)
+      .substring(2, 6)
+      .toUpperCase()}`;
+    console.log("Generated tracking number:", trackingNumber);
+
     // Calculate estimated delivery (7-14 days from now)
     const estimatedDelivery = new Date();
     estimatedDelivery.setDate(estimatedDelivery.getDate() + 10);
+    console.log("Estimated delivery date:", estimatedDelivery.toISOString());
 
     // Update order with stripe payment intent id and tracking info
-    await supabaseClient
+    const { error: updateError } = await supabaseClient
       .from("orders")
-      .update({ 
+      .update({
         stripe_payment_intent_id: session.payment_intent as string,
         tracking_number: trackingNumber,
         estimated_delivery_date: estimatedDelivery.toISOString(),
-        delivery_status: 'processing'
+        delivery_status: "processing",
       })
       .eq("id", order.id);
 
+    if (updateError) {
+      console.error(
+        "Error updating order with tracking/payment info:",
+        updateError
+      );
+      throw new Error(`Failed to update order: ${updateError.message}`);
+    }
+
+    console.log("Order updated with Stripe and tracking info");
+
     return new Response(
-      JSON.stringify({ 
-        url: session.url, 
+      JSON.stringify({
+        url: session.url,
         orderId: order.id,
-        trackingNumber 
+        trackingNumber,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -168,14 +225,12 @@ serve(async (req) => {
       }
     );
   } catch (error) {
-    console.error("Checkout error:", error);
-    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 500,
-      }
-    );
+    console.error("Checkout error caught:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "An unknown error occurred";
+    return new Response(JSON.stringify({ error: errorMessage }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500,
+    });
   }
 });

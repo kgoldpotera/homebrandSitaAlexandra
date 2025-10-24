@@ -31,7 +31,7 @@ const Checkout = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (items.length === 0) {
       toast({
         title: "Cart is empty",
@@ -41,8 +41,13 @@ const Checkout = () => {
       return;
     }
 
-    if (!shippingAddress.name || !shippingAddress.line1 || !shippingAddress.city || 
-        !shippingAddress.postalCode || !shippingAddress.country) {
+    if (
+      !shippingAddress.name ||
+      !shippingAddress.line1 ||
+      !shippingAddress.city ||
+      !shippingAddress.postalCode ||
+      !shippingAddress.country
+    ) {
       toast({
         title: "Missing information",
         description: "Please fill in all required shipping address fields",
@@ -54,12 +59,30 @@ const Checkout = () => {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: {
-          cartItems: items,
-          shippingAddress,
-        },
-      });
+      // 🔑 Get the current session (contains the JWT)
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError) throw sessionError;
+      if (!session?.access_token) {
+        throw new Error("You must be logged in to checkout");
+      }
+
+      // 🔑 Pass the token in the Authorization header
+      const { data, error } = await supabase.functions.invoke(
+        "create-checkout",
+        {
+          body: {
+            cartItems: items,
+            shippingAddress,
+          },
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        }
+      );
 
       if (error) throw error;
 
@@ -81,6 +104,7 @@ const Checkout = () => {
       setLoading(false);
     }
   };
+
 
   if (items.length === 0) {
     return (
