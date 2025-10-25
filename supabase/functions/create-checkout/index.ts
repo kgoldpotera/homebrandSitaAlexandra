@@ -12,7 +12,7 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-/** small helper to write fallback logs into the DB (if available) */
+/** Helper: Write fallback logs into DB */
 async function dbLog(supabaseClient: any, message: string) {
   try {
     await supabaseClient.from("function_logs").insert({
@@ -20,23 +20,21 @@ async function dbLog(supabaseClient: any, message: string) {
       created_at: nowIso(),
     });
   } catch (err) {
-    // best effort: if DB logging fails, at least console.error
     console.error("dbLog failed:", err);
   }
 }
 
-/** Deno-safe Resend HTTP wrapper */
+/** Helper: Send email using Resend API */
 async function sendEmailWithResend(
   resendApiKey: string | null,
   from: string,
   to: string[],
   cc: string[] | undefined,
   subject: string,
-  html: string
+  html: string,
+  replyTo?: string
 ) {
-  if (!resendApiKey) {
-    throw new Error("Missing RESEND_API_KEY");
-  }
+  if (!resendApiKey) throw new Error("Missing RESEND_API_KEY");
 
   const body: any = {
     from,
@@ -44,8 +42,8 @@ async function sendEmailWithResend(
     subject,
     html,
   };
-
   if (cc && cc.length > 0) body.cc = cc;
+  if (replyTo) body.reply_to = replyTo;
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -56,16 +54,14 @@ async function sendEmailWithResend(
     body: JSON.stringify(body),
   });
 
-  // attempt to parse response (Resend returns JSON)
   let json;
   try {
     json = await res.json();
-  } catch (e) {
+  } catch {
     throw new Error(`Resend returned non-json response (status ${res.status})`);
   }
 
   if (!res.ok) {
-    // include body message if provided
     const msg = json?.error ?? JSON.stringify(json);
     throw new Error(`Resend API error (status ${res.status}): ${msg}`);
   }
@@ -114,116 +110,56 @@ serve(async (req) => {
   try {
     const authHeader = req.headers.get("Authorization") ?? "";
     console.log("Auth header present:", !!authHeader);
-
-    if (!authHeader) {
-      const msg = "Missing Authorization header";
-      console.error(msg);
-      await dbLog(supabaseClient, `Auth error: ${msg}`);
-      throw new Error(msg);
-    }
+    if (!authHeader) throw new Error("Missing Authorization header");
 
     const token = authHeader.replace("Bearer ", "");
-    if (!token) {
-      const msg = "Authorization header present but token empty";
-      console.error(msg);
-      await dbLog(supabaseClient, `Auth error: ${msg}`);
-      throw new Error(msg);
-    }
+    if (!token) throw new Error("Authorization token empty");
 
-    // fetch user from token
     const { data: userData, error: userError } =
       await supabaseClient.auth.getUser(token);
-    if (userError) {
-      console.error("Error fetching user:", userError);
-      await dbLog(
-        supabaseClient,
-        `Error fetching user: ${JSON.stringify(userError)}`
-      );
-      throw new Error("Failed to fetch user from token");
-    }
+    if (userError)
+      throw new Error(`Auth user fetch error: ${JSON.stringify(userError)}`);
     const user = userData.user;
-    console.log("User fetched:", user?.id, user?.email);
-    if (!user?.email) {
-      const msg = "User not authenticated or no email available";
-      console.error(msg);
-      await dbLog(supabaseClient, `Auth error: ${msg}`);
-      throw new Error(msg);
-    }
+    if (!user?.email)
+      throw new Error("User not authenticated or missing email");
 
-    // parse body
-    let body: any;
-    try {
-      body = await req.json();
-    } catch (err) {
-      console.error("Failed to parse JSON body:", err);
-      await dbLog(supabaseClient, `Bad JSON body: ${err}`);
-      throw new Error("Invalid JSON body");
-    }
-    console.log("Request body:", body);
+    const body = await req.json().catch((err) => {
+      throw new Error("Invalid JSON body: " + err);
+    });
 
     const { cartItems, shippingAddress } = body;
-    if (!cartItems || !Array.isArray(cartItems) || cartItems.length === 0) {
-      const msg = "Cart is empty";
-      console.error(msg);
-      await dbLog(supabaseClient, `Checkout error: ${msg}`);
-      throw new Error(msg);
-    }
-    if (!shippingAddress) {
-      const msg = "Shipping address missing";
-      console.error(msg);
-      await dbLog(supabaseClient, `Checkout error: ${msg}`);
-      throw new Error(msg);
-    }
+    if (!cartItems || cartItems.length === 0) throw new Error("Cart is empty");
+    if (!shippingAddress) throw new Error("Missing shipping address");
 
     console.log(
-      "Processing checkout for:",
-      user.email,
-      "items:",
-      cartItems.length
+      `Processing checkout for ${user.email}, items: ${cartItems.length}`
     );
 
-    // init stripe
-    if (!stripeSecret) {
-      const msg = "Missing STRIPE_SECRET_KEY env";
-      console.error(msg);
-      await dbLog(supabaseClient, `Stripe config error: ${msg}`);
-      throw new Error(msg);
-    }
+    if (!stripeSecret) throw new Error("Missing STRIPE_SECRET_KEY env");
     const stripe = new Stripe(stripeSecret, { apiVersion: "2025-08-27.basil" });
 
-    // find or create stripe customer
+    // find or create Stripe customer
     let customerId: string | undefined;
-    try {
-      const customers = await stripe.customers.list({
+    const customers = await stripe.customers.list({
+      email: user.email,
+      limit: 1,
+    });
+    if (customers.data.length > 0) {
+      customerId = customers.data[0].id;
+    } else {
+      const created = await stripe.customers.create({
         email: user.email,
-        limit: 1,
+        name: shippingAddress.name,
       });
-      console.log("Stripe customers found:", customers.data.length);
-      if (customers.data.length > 0) {
-        customerId = customers.data[0].id;
-        console.log("Existing stripe customer:", customerId);
-      } else {
-        const created = await stripe.customers.create({
-          email: user.email,
-          name: shippingAddress.name,
-        });
-        customerId = created.id;
-        console.log("Created stripe customer:", customerId);
-      }
-    } catch (err) {
-      console.error("Stripe customer error:", err);
-      await dbLog(supabaseClient, `Stripe customer error: ${String(err)}`);
-      throw new Error("Stripe customer creation/list error");
+      customerId = created.id;
     }
 
-    // calculate total
     const total = cartItems.reduce(
       (sum: number, item: any) =>
         sum +
         Number(item.products?.price ?? item.price ?? 0) * (item.quantity ?? 1),
       0
     );
-    console.log("Calculated total:", total);
 
     // create order
     const { data: order, error: orderError } = await supabaseClient
@@ -243,45 +179,23 @@ serve(async (req) => {
       .select()
       .single();
 
-    if (orderError) {
-      console.error("Error creating order:", orderError);
-      await dbLog(
-        supabaseClient,
-        `Order creation error: ${JSON.stringify(orderError)}`
-      );
-      throw new Error(`Failed to create order: ${orderError.message}`);
-    }
-    console.log("Order created id:", order.id);
+    if (orderError)
+      throw new Error(`Order creation error: ${orderError.message}`);
 
-    // create order_items
+    // create order items
     const orderItems = cartItems.map((item: any) => ({
       order_id: order.id,
       product_id: item.product_id,
       quantity: item.quantity ?? 1,
       price: item.products?.price ?? item.price ?? 0,
     }));
-    console.log("Prepared order items:", orderItems);
+    const { error: itemsError } = await supabaseClient
+      .from("order_items")
+      .insert(orderItems);
+    if (itemsError)
+      throw new Error(`Order items insert error: ${itemsError.message}`);
 
-    try {
-      const { error: itemsError } = await supabaseClient
-        .from("order_items")
-        .insert(orderItems);
-      if (itemsError) {
-        console.error("Error inserting order_items:", itemsError);
-        await dbLog(
-          supabaseClient,
-          `Order items insertion error: ${JSON.stringify(itemsError)}`
-        );
-        throw new Error(`Failed to create order items: ${itemsError.message}`);
-      }
-      console.log("Order items inserted");
-    } catch (err) {
-      console.error("Exception inserting order_items:", err);
-      await dbLog(supabaseClient, `Order items exception: ${String(err)}`);
-      throw err;
-    }
-
-    // create stripe line items
+    // Stripe line items
     const lineItems = cartItems.map((item: any) => ({
       price_data: {
         currency: "gbp",
@@ -295,124 +209,98 @@ serve(async (req) => {
       },
       quantity: item.quantity ?? 1,
     }));
-    console.log("Line items for Stripe:", lineItems);
 
-    // create checkout session
-    let session: any;
-    try {
-      session = await stripe.checkout.sessions.create({
-        customer: customerId,
-        line_items: lineItems,
-        mode: "payment",
-        success_url: `${req.headers.get(
-          "origin"
-        )}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${req.headers.get("origin")}/checkout/cancel`,
-        metadata: {
-          order_id: order.id,
-          user_id: user.id,
-        },
-      });
-      console.log("Stripe checkout session created:", session.id);
-    } catch (err) {
-      console.error("Stripe checkout session error:", err);
-      await dbLog(supabaseClient, `Stripe session error: ${String(err)}`);
-      throw new Error("Failed to create Stripe checkout session");
-    }
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      line_items: lineItems,
+      mode: "payment",
+      success_url: `${req.headers.get(
+        "origin"
+      )}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${req.headers.get("origin")}/checkout/cancel`,
+      metadata: { order_id: order.id, user_id: user.id },
+    });
 
-    // generate tracking number
+    // tracking + estimated delivery
     const trackingNumber = `SA${Date.now().toString().slice(-8)}${Math.random()
       .toString(36)
       .substring(2, 6)
       .toUpperCase()}`;
-    console.log("Generated tracking number:", trackingNumber);
-
-    // estimate delivery
     const estimatedDelivery = new Date();
     estimatedDelivery.setDate(estimatedDelivery.getDate() + 10);
-    const estimatedDeliveryIso = estimatedDelivery.toISOString();
-    console.log("Estimated delivery:", estimatedDeliveryIso);
 
-    // update order with stripe + tracking
     const { data: updatedOrder, error: updateError } = await supabaseClient
       .from("orders")
       .update({
         stripe_payment_intent_id: session.payment_intent ?? null,
         tracking_number: trackingNumber,
-        estimated_delivery_date: estimatedDeliveryIso,
+        estimated_delivery_date: estimatedDelivery.toISOString(),
         delivery_status: "processing",
       })
       .eq("id", order.id)
       .select()
       .single();
 
-    if (updateError) {
-      console.error("Error updating order:", updateError);
-      await dbLog(
-        supabaseClient,
-        `Order update error: ${JSON.stringify(updateError)}`
-      );
-      throw new Error(`Failed to update order: ${updateError.message}`);
-    }
+    if (updateError)
+      throw new Error(`Order update error: ${updateError.message}`);
     console.log(
       "Order updated:",
-      updatedOrder?.id,
+      updatedOrder.id,
       "tracking:",
-      updatedOrder?.tracking_number
+      updatedOrder.tracking_number
     );
 
-    // --- Send confirmation email (Resend via fetch) ---
+    // --- Send confirmation email ---
     try {
       console.log("Preparing email send via Resend...");
-      await dbLog(
-        supabaseClient,
-        `Preparing email for order ${updatedOrder.id}`
-      );
-
-      const fromAddress = "House of Lepallevon <admin@resend.dev>";
+      const fromAddress = "House of Lepallevon <orders@neemacarellc.org>"; // ✅ verified domain
       const toAddresses = [updatedOrder.customer_email];
-      const ccAddresses = adminEmails.length > 0 ? adminEmails : [];
+      const ccAddresses = adminEmails;
+      const replyTo = "support@neemacarellc.org";
 
       const subject = `Your Order #${updatedOrder.id} Confirmation – House of Lepallevon`;
-      const htmlContent = `
-        <div style="font-family:Arial, sans-serif; line-height:1.5; color:#333;">
+      const html = `
+        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #222;">
           <h2 style="color:#111;">Thank you for your purchase, ${
             updatedOrder.customer_name
           }!</h2>
-          <p>Your order has been successfully placed and is now being processed.</p>
+          <p>Your order has been placed successfully and is now being processed.</p>
           <p><strong>Tracking Number:</strong> ${
             updatedOrder.tracking_number
           }</p>
           <p>Estimated Delivery: <strong>${new Date(
             updatedOrder.estimated_delivery_date
           ).toLocaleDateString()}</strong></p>
-          <hr/>
-          <p>You will receive further updates once your order ships.</p>
-          <p style="margin-top:1.5em;">— The House of Lepallevon Team</p>
+          <p>We’ll notify you when it’s shipped.</p>
+          <hr style="margin:20px 0; border:none; border-top:1px solid #ccc;">
+          <p>For questions, reply to this email or contact us at support@neemacarellc.org.</p>
+          <p style="margin-top:20px;">— The House of Lepallevon Team</p>
         </div>
       `;
 
-      const resendResp = await sendEmailWithResend(
-        resendApiKey ?? null,
+      const result = await sendEmailWithResend(
+        resendApiKey,
         fromAddress,
         toAddresses,
-        ccAddresses.length > 0 ? ccAddresses : undefined,
+        ccAddresses,
         subject,
-        htmlContent
+        html,
+        replyTo
       );
 
-      console.log("Resend API response:", resendResp);
-      await dbLog(supabaseClient, `Resend sent for order ${updatedOrder.id}`);
+      console.log("Resend API response:", result);
+      await dbLog(
+        supabaseClient,
+        `Resend email sent for order ${updatedOrder.id}`
+      );
     } catch (emailErr) {
       console.error("Error sending email:", emailErr);
       await dbLog(
         supabaseClient,
         `Email error for order ${order.id}: ${String(emailErr)}`
       );
-      // do NOT fail the whole checkout because of email failure — continue
     }
 
-    // success response: return checkout URL and order details
     return new Response(
       JSON.stringify({
         url: session.url,
@@ -426,16 +314,9 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("Checkout error caught:", error);
-    // attempt to persist critical error
-    try {
-      await dbLog(supabaseClient, `Checkout error: ${String(error)}`);
-    } catch (e) {
-      console.error("Failed to write checkout error to DB:", e);
-    }
-
-    const errorMessage =
-      error instanceof Error ? error.message : "An unknown error occurred";
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    await dbLog(supabaseClient, `Checkout error: ${String(error)}`);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return new Response(JSON.stringify({ error: message }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });
