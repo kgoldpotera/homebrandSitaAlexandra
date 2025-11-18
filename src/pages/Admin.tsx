@@ -107,16 +107,18 @@ const Admin = () => {
             </Card>
           </Link>
 
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer opacity-50">
-            <CardHeader>
-              <CardTitle>View Orders</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">
-                Coming soon: View and manage customer orders
-              </p>
-            </CardContent>
-          </Card>
+          <Link to="/admin/orders">
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+              <CardHeader>
+                <CardTitle>View Orders</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  View and manage customer orders
+                </p>
+              </CardContent>
+            </Card>
+          </Link>
         </div>
       </div>
     </Layout>

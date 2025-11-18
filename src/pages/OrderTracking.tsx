@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { Loader2, Package, Truck, CheckCircle, Clock } from "lucide-react";
 
@@ -30,12 +30,15 @@ const OrderTracking = () => {
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [trackingNumber, setTrackingNumber] = useState(searchParams.get("tracking") || "");
+  const [trackingNumber, setTrackingNumber] = useState(
+    searchParams.get("tracking") || ""
+  );
   const [order, setOrder] = useState<Order | null>(null);
 
+  // 🔹 Fetch order details
   const handleTrackOrder = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    
+
     if (!trackingNumber.trim()) {
       toast({
         title: "Missing tracking number",
@@ -77,18 +80,39 @@ const OrderTracking = () => {
     }
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "processing":
-        return <Package className="h-8 w-8 text-blue-500" />;
-      case "shipped":
-        return <Truck className="h-8 w-8 text-orange-500" />;
-      case "delivered":
-        return <CheckCircle className="h-8 w-8 text-green-500" />;
-      default:
-        return <Clock className="h-8 w-8 text-gray-500" />;
+  // 🔹 Real-time updates (Supabase listener)
+  useEffect(() => {
+    if (!trackingNumber) return;
+
+    const channel = supabase
+      .channel("order-updates")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "orders",
+          filter: `tracking_number=eq.${trackingNumber.trim()}`,
+        },
+        (payload) => {
+          console.log("🔄 Real-time update received:", payload.new);
+          setOrder(payload.new as Order);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      console.log("🧹 Unsubscribing from order updates...");
+      supabase.removeChannel(channel);
+    };
+  }, [trackingNumber]);
+
+  // 🔹 Auto-track if tracking number is in URL
+  useEffect(() => {
+    if (searchParams.get("tracking") && !order && !loading) {
+      handleTrackOrder();
     }
-  };
+  }, [searchParams]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -111,16 +135,11 @@ const OrderTracking = () => {
     });
   };
 
-  // Auto-track if tracking number in URL
-  if (searchParams.get("tracking") && !order && !loading) {
-    handleTrackOrder();
-  }
-
   return (
     <Layout>
       <div className="container mx-auto px-4 py-12">
         <h1 className="text-4xl font-bold mb-8">Track Your Order</h1>
-        
+
         <Card className="max-w-2xl mx-auto mb-8">
           <CardHeader>
             <CardTitle>Enter Tracking Number</CardTitle>
@@ -128,7 +147,9 @@ const OrderTracking = () => {
           <CardContent>
             <form onSubmit={handleTrackOrder} className="flex gap-4">
               <div className="flex-1">
-                <Label htmlFor="tracking" className="sr-only">Tracking Number</Label>
+                <Label htmlFor="tracking" className="sr-only">
+                  Tracking Number
+                </Label>
                 <Input
                   id="tracking"
                   placeholder="Enter your tracking number"
@@ -172,28 +193,68 @@ const OrderTracking = () => {
                 <div className="relative">
                   <div className="flex justify-between mb-4">
                     <div className="flex flex-col items-center flex-1">
-                      <div className={`rounded-full p-3 ${order.delivery_status === 'processing' || order.delivery_status === 'shipped' || order.delivery_status === 'delivered' ? 'bg-primary' : 'bg-gray-200'}`}>
+                      <div
+                        className={`rounded-full p-3 ${
+                          order.delivery_status === "processing" ||
+                          order.delivery_status === "shipped" ||
+                          order.delivery_status === "delivered"
+                            ? "bg-primary"
+                            : "bg-gray-200"
+                        }`}
+                      >
                         <Package className="h-5 w-5 text-white" />
                       </div>
-                      <p className="text-xs mt-2 text-center font-medium">Processing</p>
+                      <p className="text-xs mt-2 text-center font-medium">
+                        Processing
+                      </p>
                     </div>
                     <div className="flex-1 flex items-start pt-5">
-                      <div className={`h-1 w-full ${order.delivery_status === 'shipped' || order.delivery_status === 'delivered' ? 'bg-primary' : 'bg-gray-200'}`} />
+                      <div
+                        className={`h-1 w-full ${
+                          order.delivery_status === "shipped" ||
+                          order.delivery_status === "delivered"
+                            ? "bg-primary"
+                            : "bg-gray-200"
+                        }`}
+                      />
                     </div>
                     <div className="flex flex-col items-center flex-1">
-                      <div className={`rounded-full p-3 ${order.delivery_status === 'shipped' || order.delivery_status === 'delivered' ? 'bg-primary' : 'bg-gray-200'}`}>
+                      <div
+                        className={`rounded-full p-3 ${
+                          order.delivery_status === "shipped" ||
+                          order.delivery_status === "delivered"
+                            ? "bg-primary"
+                            : "bg-gray-200"
+                        }`}
+                      >
                         <Truck className="h-5 w-5 text-white" />
                       </div>
-                      <p className="text-xs mt-2 text-center font-medium">Shipped</p>
+                      <p className="text-xs mt-2 text-center font-medium">
+                        Shipped
+                      </p>
                     </div>
                     <div className="flex-1 flex items-start pt-5">
-                      <div className={`h-1 w-full ${order.delivery_status === 'delivered' ? 'bg-primary' : 'bg-gray-200'}`} />
+                      <div
+                        className={`h-1 w-full ${
+                          order.delivery_status === "delivered"
+                            ? "bg-primary"
+                            : "bg-gray-200"
+                        }`}
+                      />
                     </div>
                     <div className="flex flex-col items-center flex-1">
-                      <div className={`rounded-full p-3 ${order.delivery_status === 'delivered' ? 'bg-primary' : 'bg-gray-200'}`}>
+                      <div
+                        className={`rounded-full p-3 ${
+                          order.delivery_status === "delivered"
+                            ? "bg-primary"
+                            : "bg-gray-200"
+                        }`}
+                      >
                         <CheckCircle className="h-5 w-5 text-white" />
                       </div>
-                      <p className="text-xs mt-2 text-center font-medium">Delivered</p>
+                      <p className="text-xs mt-2 text-center font-medium">
+                        Delivered
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -203,23 +264,34 @@ const OrderTracking = () => {
                   <div>
                     <h3 className="font-semibold mb-2">Delivery Address</h3>
                     <p className="text-sm text-muted-foreground">
-                      {order.customer_name}<br />
-                      {order.shipping_address_line1}<br />
-                      {order.shipping_address_line2 && <>{order.shipping_address_line2}<br /></>}
-                      {order.shipping_city}, {order.shipping_postal_code}<br />
+                      {order.customer_name}
+                      <br />
+                      {order.shipping_address_line1}
+                      <br />
+                      {order.shipping_address_line2 && (
+                        <>
+                          {order.shipping_address_line2}
+                          <br />
+                        </>
+                      )}
+                      {order.shipping_city}, {order.shipping_postal_code}
+                      <br />
                       {order.shipping_country}
                     </p>
                   </div>
                   <div>
                     <h3 className="font-semibold mb-2">Estimated Delivery</h3>
                     <p className="text-sm text-muted-foreground">
-                      {order.delivered_at 
+                      {order.delivered_at
                         ? `Delivered on ${formatDate(order.delivered_at)}`
-                        : `Expected by ${formatDate(order.estimated_delivery_date)}`
-                      }
+                        : `Expected by ${formatDate(
+                            order.estimated_delivery_date
+                          )}`}
                     </p>
                     <h3 className="font-semibold mb-2 mt-4">Order Total</h3>
-                    <p className="text-lg font-bold text-primary">£{Number(order.amount).toFixed(2)}</p>
+                    <p className="text-lg font-bold text-primary">
+                      £{Number(order.amount).toFixed(2)}
+                    </p>
                   </div>
                 </div>
               </CardContent>

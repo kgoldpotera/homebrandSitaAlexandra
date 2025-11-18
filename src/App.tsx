@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { CartProvider } from "@/hooks/useCart";
+
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Products from "./pages/Products";
@@ -17,6 +18,7 @@ import OrderTracking from "./pages/OrderTracking";
 import Admin from "./pages/Admin";
 import AdminProducts from "./pages/AdminProducts";
 import AdminProductForm from "./pages/AdminProductForm";
+import AdminOrders from "./pages/admin/AdminOrders"; // ✅ ADD THIS IMPORT
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -39,10 +41,20 @@ const App = () => (
               <Route path="/checkout/success" element={<CheckoutSuccess />} />
               <Route path="/checkout/cancel" element={<CheckoutCancel />} />
               <Route path="/track-order" element={<OrderTracking />} />
+              {/* ---- Admin Section ---- */}
               <Route path="/admin" element={<Admin />} />
               <Route path="/admin/products" element={<AdminProducts />} />
-              <Route path="/admin/products/new" element={<AdminProductForm />} />
-              <Route path="/admin/products/:id/edit" element={<AdminProductForm />} />
+              <Route
+                path="/admin/products/new"
+                element={<AdminProductForm />}
+              />
+              <Route
+                path="/admin/products/:id/edit"
+                element={<AdminProductForm />}
+              />
+              <Route path="/admin/orders" element={<AdminOrders />} />{" "}
+              {/* ✅ NEW ROUTE */}
+              {/* ---- Catch-All ---- */}
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
