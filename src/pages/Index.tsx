@@ -174,7 +174,8 @@ const Index = () => {
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            // MODIFICATION: Changed grid-cols-1 to grid-cols-2 for mobile view
+            <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {featuredProducts?.map((product) => (
                 <Link key={product.id} to={`/products/${product.id}`}>
                   <Card className="hover:shadow-xl transition-shadow cursor-pointer h-full">
